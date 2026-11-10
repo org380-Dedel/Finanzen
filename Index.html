@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="de" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Haushaltsbuch App</title>
+    
+    <!-- PWA & App-Verhalten Meta-Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Haushaltsbuch">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#2563eb">
+
+    <!-- Eingebettetes App-Icon -->
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' width='512' height='512'%3E%3Crect width='512' height='512' rx='110' fill='%232563eb'/%3E%3Ctext x='50%25' y='55%25' font-size='260' text-anchor='middle' dominant-baseline='central'%3E💶%3C/text%3E%3C/svg%3E">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' width='512' height='512'%3E%3Crect width='512' height='512' rx='110' fill='%232563eb'/%3E%3Ctext x='50%25' y='55%25' font-size='260' text-anchor='middle' dominant-baseline='central'%3E💶%3C/text%3E%3C/svg%3E">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <style>
+        .hidden { display: none !important; }
+        /* Kleinere Schriftgröße für die aufgeklappten Auswahllisten-Optionen */
+        select option {
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans pb-12 transition-colors duration-200">
+
+    <!-- PIN-Sperre Overlay -->
+    <div id="pinOverlay" class="fixed inset-0 bg-gray-900 z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl w-full max-w-sm text-center space-y-4">
+            <div class="text-4xl">🔐</div>
+            <h2 id="pinTitle" class="text-lg font-bold text-gray-800 dark:text-gray-100">PIN festlegen</h2>
+            <p id="pinSub" class="text-xs text-gray-500 dark:text-gray-400">Bitte lege einen 6-stelligen PIN fest, um deine App zu schützen.</p>
+            <input type="password" id="pinInput" maxlength="6" inputmode="numeric" pattern="[0-9]*" placeholder="••••••" 
+                   class="w-full text-center tracking-widest text-2xl p-3 border dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+            <button type="button" id="pinSubmitBtn" class="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition">
+                Weiter
+            </button>
+        </div>
+    </div>
+
+    <div class="max-w-md mx-auto p-4">
+        <!-- Header mit Darkmode Schieberegler -->
+        <header class="mb-6 flex justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md">
+            <div>
+                <h1 class="text-xl font-bold text-blue-600 dark:text-blue-400">Haushaltsbuch</h1>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Lokal & Excel-kompatibel</p>
+            </div>
+            <!-- Schieberegler für Hell/Dunkel -->
+            <div class="flex items-center gap-2">
+                <span class="text-xs">☀️</span>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="darkModeToggle" class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                </label>
+                <span class="text-xs">🌙</span>
+            </div>
+        </header>
+
+        <!-- Registerkarten Navigation -->
+        <div class="flex bg-gray-200 dark:bg-gray-800 p-1 rounded-xl mb-6">
+            <button id="tabEntry" type="button" class="flex-1 py-2 text-sm font-semibold rounded-lg bg-white dark:bg-gray-700 shadow-sm transition">Erfassung</button>
+            <button id="tabAdmin" type="button" class="flex-1 py-2 text-sm font-semibold rounded-lg text-gray-600 dark:text-gray-400 transition">Verwaltung</button>
+        </div>
+
+        <!-- 1. ANSICHT: ERFASSUNG -->
+        <div id="viewEntry" class="space-y-6">
+            <form id="financeForm" class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md space-y-4">
+                
+                <!-- Kategorie -->
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Kategorie</label>
+                    <select id="categorySelect" required class="w-full p-2.5 text-sm border dark:border-gray-700 bg-white dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="">Bitte wählen...</option>
+                    </select>
+                </div>
+
+                <!-- Monat & Jahr -->
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-sm font-semibold">Monat & Jahr (MM-JJJJ)</label>
+                        <button type="button" id="todayBtn" class="text-xs bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2.5 py-1 rounded-md hover:bg-blue-200 dark:hover:bg-blue-800 transition font-medium">
+                            📅 Heute
+                        </button>
+                    </div>
+                    <input type="text" id="dateMonthYear" placeholder="z.B. 08-2027" required 
+                           class="w-full p-2.5 text-sm border dark:border-gray-700 bg-white dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+
+                <!-- Firma -->
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Firma / Geschäft</label>
+                    <select id="companySelect" required class="w-full p-2.5 text-sm border dark:border-gray-700 bg-white dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="">Bitte wählen...</option>
+                    </select>
+                </div>
+
+                <!-- Artikel / Teil -->
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Artikel / Bezeichnung</label>
+                    <select id="articleSelect" required class="w-full p-2.5 text-sm border dark:border-gray-700 bg-white dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="">Bitte wählen...</option>
+                    </select>
+                </div>
+
+                <!-- Beträge -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold mb-1 text-green-600 dark:text-green-400">Einnahme (€)</label>
+                        <input type="number" step="0.01" id="income" placeholder="0.00" 
+                               class="w-full p-2.5 text-sm border dark:border-gray-700 bg-white dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-green-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold mb-1 text-red-600 dark:text-red-400">Ausgabe (€)</label>
+                        <input type="number" step="0.01" id="expense" placeholder="0.00" 
+                               class="w-full p-2.5 text-sm border dark:border-gray-700 bg-white dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-red-500 outline-none">
+                    </div>
+                </div>
+
+                <!-- Buttons -->
+                <div class="pt-2 flex gap-2">
+                    <button type="submit" class="flex-1 bg-blue-600 text-white text-sm font-semibold p-3 rounded-lg hover:bg-blue-700 transition">
+                        Speichern
+                    </button>
+                    <button type="button" id="exportBtn" class="bg-green-600 text-white text-sm font-semibold p-3 rounded-lg hover:bg-green-700 transition px-4">
+                        Excel Export
+                    </button>
+                </div>
+            </form>
+
+            <!-- Letzte Einträge -->
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md">
+                <h2 class="text-base font-semibold mb-3 flex justify-between items-center">
+                    <span>Letzte Einträge</span>
+                    <span id="entryCount" class="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">0 Einträge</span>
+                </h2>
+                <div id="entriesList" class="space-y-2 max-h-60 overflow-y-auto text-sm">
+                    <p class="text-gray-400 text-center py-4">Noch keine Einträge vorhanden.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. ANSICHT: VERWALTUNG -->
+        <div id="viewAdmin" class="space-y-6 hidden">
+            <!-- OneDrive Cloud-Synchronisation -->
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md space-y-3 border border-blue-100 dark:border-blue-900/30">
+                <h2 class="text-base font-semibold text-blue-600 dark:text-blue-400">☁️ OneDrive Synchronisation</h2>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Speichere den aktuellen Stand (inkl. Stammdaten) als Sicherungsdatei direkt in deinen OneDrive-Ordner oder lade ihn auf einem anderen Gerät ein.</p>
+                <div class="flex gap-2 pt-1">
+                    <button type="button" id="backupJsonBtn" class="flex-1 bg-blue-600 text-white px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-blue-700 transition">
+                        💾 Backup speichern
+                    </button>
+                    <label class="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition text-center cursor-pointer flex items-center justify-center">
+                        📂 Backup laden
+                        <input type="file" id="restoreJsonInput" accept=".json" class="hidden">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Speicher bereinigen -->
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md space-y-3 border border-red-100 dark:border-red-900/30">
+                <h2 class="text-base font-semibold text-red-600 dark:text-red-400">Speicher-Bereinigung</h2>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Löscht alle aktuell erfassten Einträge vom Gerät. Ideal, um die Daten nach dem Excel-Export restlos zu entfernen.</p>
+                <button type="button" id="clearStorageBtn" class="w-full bg-red-600 text-white px-4 py-2.5 rounded-lg text-xs font-semibold hover:bg-red-700 transition">
+                    🗑️ Alle Einträge jetzt löschen
+                </button>
+            </div>
+
+            <!-- Kategorien verwalten -->
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md space-y-3">
+                <h2 class="text-base font-semibold text-blue-600 dark:text-blue-400">Kategorien-Stammdaten</h2>
+                <div class="flex gap-2">
+                    <input type="text" id="newCategoryInput" placeholder="Neue Kategorie hinzufügen..." 
+                           class="flex-1 p-2.5 border dark:border-gray-700 bg-white dark:bg-gray-900 rounded-lg text-sm outline-none">
+                    <button type="button" id="addCategoryBtn" class="bg-blue-600 text-white px-4 py-2.5 rounded-lg text-xs font-semibold hover:bg-blue-700">Hinzufügen</button>
+                </div>
+                <div id="masterCategoryList" class="space-y-1 max-h-40 overflow-y-auto text-sm border dark:border-gray-700 rounded-lg p-2 bg-gray-50 dark:bg-gray-900"></div>
+            </div>
+
+            <!-- Firmen verwalten -->
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md space-y-3">
+                <h2 class="text-base font-semibold text-blue-600 dark:text-blue-400">Firmen-Stammdaten</h2>
+                <div class="flex gap-2">
+                    <input type="text" id="newCompanyInput" placeholder="Neue Firma hinzufügen..." 
+                           class="flex-1 p-2.5 border dark:border-gray-700 bg-white dark:bg-gray-900 rounded-lg text-sm outline-none">
+                    <button type="button" id="addCompanyBtn" class="bg-blue-600 text-white px-4 py-2.5 rounded-lg text-xs font-semibold hover:bg-blue-700">Hinzufügen</button>
+                </div>
+                <div id="masterCompanyList" class="space-y-1 max-h-40 overflow-y-auto text-sm border dark:border-gray-700 rounded-lg p-2 bg-gray-50 dark:bg-gray-900"></div>
+            </div>
+
+            <!-- Artikel verwalten -->
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md space-y-3">
+                <h2 class="text-base font-semibold text-blue-600 dark:text-blue-400">Artikel-Stammdaten</h2>
+                <div class="flex gap-2">
+                    <input type="text" id="newArticleInput" placeholder="Neuen Artikel hinzufügen..." 
+                           class="flex-1 p-2.5 border dark:border-gray-700 bg-white dark:bg-gray-900 rounded-lg text-sm outline-none">
+                    <button type="button" id="addArticleBtn" class="bg-blue-600 text-white px-4 py-2.5 rounded-lg text-xs font-semibold hover:bg-blue-700">Hinzufügen</button>
+                </div>
+                <div id="masterArticleList" class="space-y-1 max-h-40 overflow-y-auto text-sm border dark:border-gray-700 rounded-lg p-2 bg-gray-50 dark:bg-gray-900"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // PIN-Logik
+            const pinOverlay = document.getElementById('pinOverlay');
+            const pinTitle = document.getElementById('pinTitle');
+            const pinSub = document.getElementById('pinSub');
+            const pinInput = document.getElementById('pinInput');
+            const pinSubmitBtn = document.getElementById('pinSubmitBtn');
+
+            const savedPin = localStorage.getItem('app_pin');
+
+            if (!savedPin) {
+                pinTitle.innerText = "PIN festlegen";
+                pinSub.innerText = "Bitte wähle einen 6-stelligen PIN (Zahlen) für deine App:";
+                pinSubmitBtn.innerText = "PIN speichern";
+            } else {
+                pinTitle.innerText = "App gesperrt";
+                pinSub.innerText = "Bitte gib deinen 6-stelligen PIN ein:";
+                pinSubmitBtn.innerText = "Entsperren";
+            }
+
+            function handlePinAction() {
+                const enteredPin = pinInput.value.trim();
+                if (enteredPin.length !== 6 || isNaN(enteredPin)) {
+                    alert('Der PIN muss exakt aus 6 Ziffern bestehen!');
+                    return;
+                }
+
+                if (!savedPin) {
+                    localStorage.setItem('app_pin', enteredPin);
+                    pinOverlay.classList.add('hidden');
+                } else {
+                    if (enteredPin === savedPin) {
+                        pinOverlay.classList.add('hidden');
+                    } else {
+                        alert('Falscher PIN!');
+                        pinInput.value = '';
+                    }
+                }
+            }
+
+            pinSubmitBtn.addEventListener('click', handlePinAction);
+            pinInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') handlePinAction();
+            });
+
+            // App-Daten laden
+            let entries = JSON.parse(localStorage.getItem('finance_entries')) || [];
+            
+            const defaultCategories = [
+                "Arbeitgeber", "Haus -Ersatzteile/ Reparaturen/ Anschaffungen", "Gemeinsame Nebenkosten/Lebensmittel",
+                "Eigenständige Nebenkosten/ Lebensmittel", "Kinder", "Versicherungen", "Auto – Benzinkosten",
+                "Auto – Versicherungen, Steuern, Fzg.kauf", "Auto – Sonstiges (Unfall, Reinigung etc.)",
+                "Verein – SV Re-De, SSG Re-De", "Verein – FFW Repke", "Verein – OFC", "Verein – Sonstige",
+                "Freizeitaktivitäten Familie", "Freizeitaktivitäten eigene", "Diverse Ausgaben für Geschenke", "Sonstiges"
+            ];
+            let masterCategories = JSON.parse(localStorage.getItem('master_categories')) || defaultCategories;
+            let masterCompanies = JSON.parse(localStorage.getItem('master_companies')) || ['Supermarkt', 'Tankstelle', 'Arbeitgeber'];
+            let masterArticles = JSON.parse(localStorage.getItem('master_articles')) || ['Lebensmittel', 'Benzin', 'Gehalt'];
+
+            // Sortier-Hilfsfunktion: 1. Häufigkeit (absteigend), 2. Alphabetisch (A-Z)
+            function sortItemsByFrequencyAndAlphabet(itemsList, allEntries, type) {
+                // Häufigkeiten zählen
+                const counts = {};
+                itemsList.forEach(item => counts[item] = 0);
+                
+                allEntries.forEach(entry => {
+                    const val = entry[type];
+                    if (val) {
+                        counts[val] = (counts[val] || 0) + 1;
+                    }
+                });
+
+                // Sortieren: Höchste Häufigkeit zuerst, bei Gleichstand alphabetisch
+                return [...itemsList].sort((a, b) => {
+                    const countA = counts[a] || 0;
+                    const countB = counts[b] || 0;
+                    if (countB !== countA) {
+                        return countB - countA; // Häufigste zuerst
+                    }
+                    return a.localeCompare(b, 'de', { sensitivity: 'base' }); // Danach A-Z
+                });
+            }
+
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            const htmlElement = document.documentElement;
+
+            if (localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                htmlElement.classList.add('dark');
+                if (darkModeToggle) darkModeToggle.checked = true;
+            }
+
+            if (darkModeToggle) {
+                darkModeToggle.addEventListener('change', function() {
+                    if (this.checked) {
+                        htmlElement.classList.add('dark');
+                        localStorage.setItem('theme', 'dark');
+                    } else {
+                        htmlElement.classList.remove('dark');
+                        localStorage.setItem('theme', 'light');
+                    }
+                });
+            }
+
+            const tabEntry = document.getElementById('tabEntry');
+            const tabAdmin = document.getElementById('tabAdmin');
+            const entryView = document.getElementById('viewEntry');
+            const adminView = document.getElementById('viewAdmin');
+
+            function switchTab(tab) {
+                if (tab === 'entry') {
+                    entryView.classList.remove('hidden');
+                    adminView.classList.add('hidden');
+                    tabEntry.className = "flex-1 py-2 text-sm font-semibold rounded-lg bg-white dark:bg-gray-700 shadow-sm transition";
+                    tabAdmin.className = "flex-1 py-2 text-sm font-semibold rounded-lg text-gray-600 dark:text-gray-400 transition";
+                } else {
+                    entryView.classList.add('hidden');
+                    adminView.classList.remove('hidden');
+                    tabAdmin.className = "flex-1 py-2 text-sm font-semibold rounded-lg bg-white dark:bg-gray-700 shadow-sm transition";
+                    tabEntry.className = "flex-1 py-2 text-sm font-semibold rounded-lg text-gray-600 dark:text-gray-400 transition";
+                    renderAdminLists();
+                }
+            }
+
+            if (tabEntry) tabEntry.addEventListener('click', () => switchTab('entry'));
+            if (tabAdmin) tabAdmin.addEventListener('click', () => switchTab('admin'));
+
+            function setCurrentMonth() {
+                const now = new Date();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const year = now.getFullYear();
+                const dateInput = document.getElementById('dateMonthYear');
+                if (dateInput) dateInput.value = `${month}-${year}`;
+            }
+
+            setCurrentMonth();
+            const todayBtn = document.getElementById('todayBtn');
+            if (todayBtn) todayBtn.addEventListener('click', setCurrentMonth);
+
+            function updateLists() {
+                const sortedCategories = sortItemsByFrequencyAndAlphabet(masterCategories, entries, 'category');
+                const sortedCompanies = sortItemsByFrequencyAndAlphabet([...new Set([...masterCompanies, ...entries.map(e => e.company)])], entries, 'company');
+                const sortedArticles = sortItemsByFrequencyAndAlphabet([...new Set([...masterArticles, ...entries.map(e => e.article)])], entries, 'article');
+
+                const catSelect = document.getElementById('categorySelect');
+                const compSelect = document.getElementById('companySelect');
+                const artSelect = document.getElementById('articleSelect');
+
+                if (catSelect) {
+                    const currentVal = catSelect.value;
+                    catSelect.innerHTML = '<option value="">Bitte wählen...</option>' + sortedCategories.map(c => `<option value="${c}">${c}</option>`).join('');
+                    catSelect.value = currentVal;
+                }
+
+                if (compSelect) {
+                    const currentVal = compSelect.value;
+                    compSelect.innerHTML = '<option value="">Bitte wählen...</option>' + sortedCompanies.map(c => `<option value="${c}">${c}</option>`).join('');
+                    compSelect.value = currentVal;
+                }
+
+                if (artSelect) {
+                    const currentVal = artSelect.value;
+                    artSelect.innerHTML = '<option value="">Bitte wählen...</option>' + sortedArticles.map(a => `<option value="${a}">${a}</option>`).join('');
+                    artSelect.value = currentVal;
+                }
+            }
+
+            window.deleteMasterCategory = function(index) {
+                masterCategories.splice(index, 1);
+                localStorage.setItem('master_categories', JSON.stringify(masterCategories));
+                renderAdminLists();
+                updateLists();
+            };
+
+            window.deleteMasterCompany = function(index) {
+                masterCompanies.splice(index, 1);
+                localStorage.setItem('master_companies', JSON.stringify(masterCompanies));
+                renderAdminLists();
+                updateLists();
+            };
+
+            window.deleteMasterArticle = function(index) {
+                masterArticles.splice(index, 1);
+                localStorage.setItem('master_articles', JSON.stringify(masterArticles));
+                renderAdminLists();
+                updateLists();
+            };
+
+            function renderAdminLists() {
+                const catListContainer = document.getElementById('masterCategoryList');
+                const compListContainer = document.getElementById('masterCompanyList');
+                const artListContainer = document.getElementById('masterArticleList');
+
+                if (catListContainer) {
+                    catListContainer.innerHTML = masterCategories.length === 0 
+                        ? '<p class="text-gray-400 text-center py-2">Keine Kategorien hinterlegt.</p>'
+                        : masterCategories.map((c, i) => `
+                            <div class="flex justify-between items-center bg-white dark:bg-gray-800 p-2 rounded border dark:border-gray-700">
+                                <span class="text-sm">${c}</span>
+                                <button type="button" onclick="deleteMasterCategory(${i})" class="text-red-500 hover:text-red-700 text-xs font-bold px-2 py-1">Löschen</button>
+                            </div>
+                        `).join('');
+                }
+
+                if (compListContainer) {
+                    compListContainer.innerHTML = masterCompanies.length === 0 
+                        ? '<p class="text-gray-400 text-center py-2">Keine Firmen hinterlegt.</p>'
+                        : masterCompanies.map((c, i) => `
+                            <div class="flex justify-between items-center bg-white dark:bg-gray-800 p-2 rounded border dark:border-gray-700">
+                                <span class="text-sm">${c}</span>
+                                <button type="button" onclick="deleteMasterCompany(${i})" class="text-red-500 hover:text-red-700 text-xs font-bold px-2 py-1">Löschen</button>
+                            </div>
+                        `).join('');
+                }
+
+                if (artListContainer) {
+                    artListContainer.innerHTML = masterArticles.length === 0 
+                        ? '<p class="text-gray-400 text-center py-2">Keine Artikel hinterlegt.</p>'
+                        : masterArticles.map((a, i) => `
+                            <div class="flex justify-between items-center bg-white dark:bg-gray-800 p-2 rounded border dark:border-gray-700">
+                                <span class="text-sm">${a}</span>
+                                <button type="button" onclick="deleteMasterArticle(${i})" class="text-red-500 hover:text-red-700 text-xs font-bold px-2 py-1">Löschen</button>
+                            </div>
+                        `).join('');
+                }
+            }
+
+            const addCatBtn = document.getElementById('addCategoryBtn');
+            if (addCatBtn) {
+                addCatBtn.addEventListener('click', function() {
+                    const input = document.getElementById('newCategoryInput');
+                    const val = input.value.trim();
+                    if (val && !masterCategories.includes(val)) {
+                        masterCategories.push(val);
+                        localStorage.setItem('master_categories', JSON.stringify(masterCategories));
+                        input.value = '';
+                        renderAdminLists();
+                        updateLists();
+                    }
+                });
+            }
+
+            const addCompBtn = document.getElementById('addCompanyBtn');
+            if (addCompBtn) {
+                addCompBtn.addEventListener('click', function() {
+                    const input = document.getElementById('newCompanyInput');
+                    const val = input.value.trim();
+                    if (val && !masterCompanies.includes(val)) {
+                        masterCompanies.push(val);
+                        localStorage.setItem('master_companies', JSON.stringify(masterCompanies));
+                        input.value = '';
+                        renderAdminLists();
+                        updateLists();
+                    }
+                });
+            }
+
+            const addArtBtn = document.getElementById('addArticleBtn');
+            if (addArtBtn) {
+                addArtBtn.addEventListener('click', function() {
+                    const input = document.getElementById('newArticleInput');
+                    const val = input.value.trim();
+                    if (val && !masterArticles.includes(val)) {
+                        masterArticles.push(val);
+                        localStorage.setItem('master_articles', JSON.stringify(masterArticles));
+                        input.value = '';
+                        renderAdminLists();
+                        updateLists();
+                    }
+                });
+            }
+
+            function renderEntries() {
+                const listEl = document.getElementById('entriesList');
+                const countEl = document.getElementById('entryCount');
+                if (countEl) countEl.innerText = `${entries.length} Einträge`;
+
+                if (!listEl) return;
+
+                if (entries.length === 0) {
+                    listEl.innerHTML = '<p class="text-gray-400 text-center py-4">Noch keine Einträge vorhanden.</p>';
+                    return;
+                }
+
+                listEl.innerHTML = entries.slice(-10).reverse().map((e) => `
+                    <div class="p-2.5 bg-gray-50 dark:bg-gray-900 rounded border dark:border-gray-700 flex justify-between items-center">
+                        <div>
+                            <div class="font-bold text-xs text-blue-600 dark:text-blue-400">${e.category}</div>
+                            <div class="text-sm font-medium">${e.company} - ${e.article}</div>
+                            <div class="text-xs text-gray-400">${e.date}</div>
+                        </div>
+                        <div class="text-right">
+                            ${e.income ? `<div class="text-green-600 dark:text-green-400 font-bold text-sm">+${e.income} €</div>` : ''}
+                            ${e.expense ? `<div class="text-red-600 dark:text-red-400 font-bold text-sm">-${e.expense} €</div>` : ''}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // JSON Backup exportieren
+            const backupJsonBtn = document.getElementById('backupJsonBtn');
+            if (backupJsonBtn) {
+                backupJsonBtn.addEventListener('click', function() {
+                    const backupData = {
+                        entries: entries,
+                        masterCategories: masterCategories,
+                        masterCompanies: masterCompanies,
+                        masterArticles: masterArticles
+                    };
+                    
+                    const now = new Date();
+                    const yyyy = now.getFullYear();
+                    const mm = String(now.getMonth() + 1).padStart(2, '0');
+                    const dd = String(now.getDate()).padStart(2, '0');
+                    const dateStr = `${yyyy}${mm}${dd}`;
+
+                    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Finanzen_Backup_${dateStr}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                });
+            }
+
+            // JSON Backup importieren
+            const restoreJsonInput = document.getElementById('restoreJsonInput');
+            if (restoreJsonInput) {
+                restoreJsonInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        try {
+                            const parsed = JSON.parse(event.target.result);
+                            
+                            if (confirm('Möchtest du die Daten aus dem Backup wirklich laden? Aktuelle lokale Änderungen werden überschrieben.')) {
+                                entries = parsed.entries || parsed.finance_entries || [];
+                                masterCategories = parsed.masterCategories || parsed.categories || defaultCategories;
+                                masterCompanies = parsed.masterCompanies || parsed.companies || parsed.master_companies || ['Supermarkt', 'Tankstelle', 'Arbeitgeber'];
+                                masterArticles = parsed.masterArticles || parsed.articles || parsed.master_articles || ['Lebensmittel', 'Benzin', 'Gehalt'];
+
+                                localStorage.setItem('finance_entries', JSON.stringify(entries));
+                                localStorage.setItem('master_categories', JSON.stringify(masterCategories));
+                                localStorage.setItem('master_companies', JSON.stringify(masterCompanies));
+                                localStorage.setItem('master_articles', JSON.stringify(masterArticles));
+
+                                updateLists();
+                                renderEntries();
+                                renderAdminLists();
+
+                                restoreJsonInput.value = '';
+
+                                alert('Backup erfolgreich geladen! Alle Stammdaten und Einträge sind nun aktuell.');
+                            } else {
+                                restoreJsonInput.value = '';
+                            }
+                        } catch (err) {
+                            alert('Fehler beim Lesen der Backup-Datei.');
+                            restoreJsonInput.value = '';
+                        }
+                    };
+                    reader.readAsText(file);
+                });
+            }
+
+            const financeForm = document.getElementById('financeForm');
+            if (financeForm) {
+                financeForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+
+                    const category = document.getElementById('categorySelect').value;
+                    const date = document.getElementById('dateMonthYear').value;
+                    const company = document.getElementById('companySelect').value;
+                    const article = document.getElementById('articleSelect').value;
+                    const income = document.getElementById('income').value ? parseFloat(document.getElementById('income').value).toFixed(2) : '';
+                    const expense = document.getElementById('expense').value ? parseFloat(document.getElementById('expense').value).toFixed(2) : '';
+
+                    if(!income && !expense) {
+                        alert('Bitte entweder eine Einnahme oder eine Ausgabe eingeben!');
+                        return;
+                    }
+
+                    if(!category) {
+                        alert('Bitte eine Kategorie auswählen!');
+                        return;
+                    }
+
+                    if(!company) {
+                        alert('Bitte eine Firma auswählen!');
+                        return;
+                    }
+
+                    if(!article) {
+                        alert('Bitte einen Artikel auswählen!');
+                        return;
+                    }
+
+                    entries.push({ category, date, company, article, income, expense });
+                    localStorage.setItem('finance_entries', JSON.stringify(entries));
+
+                    document.getElementById('income').value = '';
+                    document.getElementById('expense').value = '';
+
+                    updateLists();
+                    renderEntries();
+                });
+            }
+
+            const clearStorageBtn = document.getElementById('clearStorageBtn');
+            if (clearStorageBtn) {
+                clearStorageBtn.addEventListener('click', function() {
+                    if (entries.length === 0) {
+                        alert('Der Speicher ist bereits leer.');
+                        return;
+                    }
+
+                    if (confirm('Achtung: Hast du die Daten vorher als Excel/CSV exportiert?\n\nAlle aktuellen Einträge werden jetzt unwiderruflich von diesem Gerät gelöscht!')) {
+                        entries = [];
+                        localStorage.removeItem('finance_entries');
+                        updateLists();
+                        renderEntries();
+                        alert('Der Speicher wurde erfolgreich bereinigt.');
+                    }
+                });
+            }
+
+            const exportBtn = document.getElementById('exportBtn');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', function() {
+                    if (entries.length === 0) {
+                        alert('Keine Daten zum Exportieren vorhanden!');
+                        return;
+                    }
+
+                    let csvContent = "Kategorie;Datum;Firma;Artikel;Einnahme;Ausgabe\n";
+                    entries.forEach(e => {
+                        let row = [
+                            `"${e.category}"`,
+                            `"${e.date}"`,
+                            `"${e.company}"`,
+                            `"${e.article}"`,
+                            `"${e.income.replace('.', ',')}"`,
+                            `"${e.expense.replace('.', ',')}"`
+                        ];
+                        csvContent += row.join(";") + "\n";
+                    });
+
+                    const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    const now = new Date();
+                    const yyyy = now.getFullYear();
+                    const mm = String(now.getMonth() + 1).padStart(2, '0');
+                    const dd = String(now.getDate()).padStart(2, '0');
+                    a.download = `Finanzen_Export_${yyyy}${mm}${dd}.csv`;
+
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                });
+            }
+
+            updateLists();
+            renderEntries();
+        });
+    </script>
+</body>
+</html>
